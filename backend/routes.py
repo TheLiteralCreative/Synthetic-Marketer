@@ -3,16 +3,23 @@ from __future__ import annotations
 
 import asyncio
 import json
+import platform
 import re
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from backend import __version__, audit_runner, job_queue, progress, settings as settings_mod
+from backend import (
+    __version__, audit_meta, audit_runner, job_queue, progress,
+    settings as settings_mod,
+)
 from backend.models import PingResponse, SettingsModel, SettingsResponse
 
 router = APIRouter(prefix="/api")
@@ -159,6 +166,99 @@ def list_audits() -> dict:
     return {"jobs": in_memory, "bins": bins}
 
 
+# ----- Bins (project-bin metadata + file ops) -------------------------------
+
+@router.get("/bins")
+def list_bins() -> dict:
+    """Lightweight list of all Synth-mkt_* bins in the configured output folder."""
+    cfg = settings_mod.load()
+    output_folder = Path(cfg.get("output_folder") or ROOT)
+    bins = audit_meta.list_bins(output_folder)
+    return {"output_folder": str(output_folder), "bins": bins}
+
+
+@router.get("/bins/{bin_name}")
+def get_bin(bin_name: str) -> dict:
+    """Full metadata for a single bin — score, categories, findings, files."""
+    bin_dir = _resolve_bin(bin_name)
+    return audit_meta.parse_bin(bin_dir)
+
+
+@router.get("/bins/{bin_name}/file/{filename:path}")
+def serve_bin_file(bin_name: str, filename: str):
+    """Serve a deliverable file (PDF, MD, JSON) from inside a bin.
+
+    For PDFs the browser displays inline; for markdown the server sends as
+    text/markdown so the browser typically downloads or shows source.
+    """
+    bin_dir = _resolve_bin(bin_name)
+    safe = (bin_dir / filename).resolve()
+    # safety: ensure resolved path stays inside the bin
+    try:
+        safe.relative_to(bin_dir.resolve())
+    except ValueError:
+        raise HTTPException(400, "path escape attempt")
+    if not safe.is_file():
+        raise HTTPException(404, "file not found")
+    media = "application/pdf" if safe.suffix == ".pdf" else (
+        "text/markdown" if safe.suffix == ".md" else "application/octet-stream"
+    )
+    return FileResponse(str(safe), media_type=media, filename=safe.name)
+
+
+class OpenRequest(BaseModel):
+    target: str = "folder"  # 'folder' or a specific filename inside the bin
+
+
+@router.post("/bins/{bin_name}/open")
+def open_bin(bin_name: str, payload: OpenRequest) -> dict:
+    """Open the bin folder (or a specific file) in the OS default app.
+
+    macOS uses `open`, Windows uses `start`, Linux uses `xdg-open`.
+    """
+    bin_dir = _resolve_bin(bin_name)
+    if payload.target == "folder":
+        path = bin_dir
+    else:
+        path = (bin_dir / payload.target).resolve()
+        try:
+            path.relative_to(bin_dir.resolve())
+        except ValueError:
+            raise HTTPException(400, "path escape attempt")
+        if not path.exists():
+            raise HTTPException(404, "file not found")
+
+    system = platform.system()
+    try:
+        if system == "Darwin":
+            subprocess.Popen(["open", str(path)])
+        elif system == "Windows":
+            subprocess.Popen(["cmd", "/c", "start", "", str(path)], shell=False)
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
+    except Exception as e:
+        raise HTTPException(500, f"open failed: {e}")
+    return {"opened": str(path)}
+
+
+@router.post("/bins/{bin_name}/rerender")
+async def rerender_pdfs(bin_name: str) -> dict:
+    """Re-run tools/md_to_pdf.py against this bin to regenerate PDFs."""
+    bin_dir = _resolve_bin(bin_name)
+    script = ROOT / "tools" / "md_to_pdf.py"
+    if not script.exists():
+        raise HTTPException(500, "md_to_pdf.py not found")
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, str(script), str(bin_dir),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise HTTPException(500, f"rerender failed: {stderr.decode()[:300]}")
+    return {"ok": True, "log": stdout.decode().splitlines()[-10:]}
+
+
 # ----- helpers --------------------------------------------------------------
 
 def _derive_brand(url: str) -> str:
@@ -167,3 +267,15 @@ def _derive_brand(url: str) -> str:
     host = m.group(1) if m else url
     base = host.split(".")[0]
     return re.sub(r"[^A-Za-z0-9]+", "", base) or "Audit"
+
+
+def _resolve_bin(bin_name: str) -> Path:
+    """Resolve a bin name against the configured output folder. 404 if missing."""
+    if not re.match(r"^Synth-mkt_[A-Za-z0-9_-]+$", bin_name):
+        raise HTTPException(400, "invalid bin name")
+    cfg = settings_mod.load()
+    output_folder = Path(cfg.get("output_folder") or ROOT)
+    bin_dir = output_folder / bin_name
+    if not bin_dir.is_dir():
+        raise HTTPException(404, "bin not found")
+    return bin_dir
