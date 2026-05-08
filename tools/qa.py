@@ -63,17 +63,12 @@ CROSS_AUDIT_PATTERNS = [
     (r"\b(?:per|from) (?:the )?[A-Z][a-z]+ (?:Banktech|Freight|Funding) audit\b", "per-X-audit framing"),
 ]
 
-# Score-extraction patterns. Tolerant of formatting variations:
-#   **Marketing Score:** 52/100
-#   **Score:** 52 / 100        (spaces around slash)
-#   **Overall Score:** 52
-#   Overall Marketing Score: 52/100
+# Score-extraction: take the FIRST occurrence of `XX/100` in the document.
+# Every deliverable uses this format in its header (Overall Score: XX/100,
+# **Overall: XX/100**, etc.), so the first match is always the headline.
+# Spaces around the slash are tolerated.
 OVERALL_SCORE_PATTERNS = [
-    re.compile(
-        r"(?:\*\*)?(?:Overall(?:\s+Marketing)?\s+Score|Marketing\s+Score|Score)(?:\*\*)?"
-        r"[:\s\*]+(\d{1,3})\s*(?:/\s*100)?\b",
-        re.IGNORECASE,
-    ),
+    re.compile(r"\b(\d{1,3})\s*/\s*100\b"),
 ]
 
 # Category score row in the breakdown table.
@@ -115,9 +110,21 @@ MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 # Phone-number pattern
 PHONE_RE = re.compile(r"\(?\b\d{3}\)?[\s\-\.]+\d{3}[\s\-\.]+\d{4}\b")
 
-# Sibling brands tracked across audits — auto-grown from sibling bin names
+# Generic English words that show up as brand tokens (smoke tests, placeholders)
+# but should NOT be treated as real sibling-brand mentions.
+GENERIC_BRAND_TOKENS = {
+    "example", "test", "demo", "sample", "smoke", "audit", "brand",
+    "draft", "temp", "tmp", "todo", "foo", "bar", "baz",
+}
+
+
 def discover_sibling_brands(bin_dir: Path) -> list[str]:
-    """Find other Synth-mkt_* bins in the same parent and extract their brand tokens."""
+    """Find other Synth-mkt_* bins in the same parent and extract their brand tokens.
+
+    Skips bins whose brand token is a generic English word (e.g. 'example' from
+    Synth-mkt_example_*) because matching those would produce false positives
+    against ordinary prose in the subject deliverables.
+    """
     parent = bin_dir.parent
     siblings = []
     for child in parent.glob("Synth-mkt_*"):
@@ -126,7 +133,10 @@ def discover_sibling_brands(bin_dir: Path) -> list[str]:
         # extract brand from "Synth-mkt_<Brand>_<YYYYMMDD>"
         parts = child.name.split("_")
         if len(parts) >= 3:
-            siblings.append(parts[1])
+            brand = parts[1]
+            if brand.lower() in GENERIC_BRAND_TOKENS:
+                continue
+            siblings.append(brand)
     return siblings
 
 

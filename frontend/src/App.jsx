@@ -1,5 +1,6 @@
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import NewAudit from './views/NewAudit.jsx';
+import InProgress from './views/InProgress.jsx';
 import AllAudits from './views/AllAudits.jsx';
 import Settings from './views/Settings.jsx';
 
@@ -18,13 +19,14 @@ export default function App() {
           Settings
         </NavLink>
         <div style={{ flex: 1 }} />
-        <small style={{ opacity: 0.5 }}>v0.1.0 · B1 foundation</small>
+        <small style={{ opacity: 0.5 }}>v0.1.0 · B3 in-progress UI</small>
       </aside>
 
       <main className="main">
         <Routes>
           <Route path="/" element={<Navigate to="/new" replace />} />
           <Route path="/new" element={<NewAudit />} />
+          <Route path="/audits/:jobId" element={<InProgress />} />
           <Route path="/all" element={<AllAudits />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>

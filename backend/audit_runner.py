@@ -275,7 +275,7 @@ async def _phase8_pdfs(bin_dir: Path, job_id: str) -> None:
 
 def _extract_dashboard_payload(audit_text: str, brand: str, url: str) -> dict:
     """Parse MARKETING-AUDIT.md to build the dashboard JSON the script expects."""
-    overall = _extract_int(r"(?:Overall(?:\s+Marketing)?\s+Score|Marketing\s+Score)[:\s\*]+(\d+)\s*(?:/\s*100)?\b", audit_text) or 0
+    overall = _extract_int(r"\b(\d{1,3})\s*/\s*100\b", audit_text) or 0
 
     cat_re = re.compile(
         r"\|\s*(?:\*\*)?(Content & Messaging|Conversion Optimization|"
@@ -387,7 +387,7 @@ async def run_audit(
         await _phase8_pdfs(bin_dir, job_id)
 
         # Final score from MARKETING-AUDIT.md
-        score = _extract_int(r"(?:Overall(?:\s+Marketing)?\s+Score|Marketing\s+Score)[:\s\*]+(\d+)\s*(?:/\s*100)?\b", audit_text)
+        score = _extract_int(r"\b(\d{1,3})\s*/\s*100\b", audit_text)
         job_queue.mark_done(job_id, score=score)
         progress.done(job_id, score=score)
         return {
