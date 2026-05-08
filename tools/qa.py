@@ -63,20 +63,51 @@ CROSS_AUDIT_PATTERNS = [
     (r"\b(?:per|from) (?:the )?[A-Z][a-z]+ (?:Banktech|Freight|Funding) audit\b", "per-X-audit framing"),
 ]
 
-# Score-extraction patterns
+# Score-extraction patterns. Tolerant of formatting variations:
+#   **Marketing Score:** 52/100
+#   **Score:** 52 / 100        (spaces around slash)
+#   **Overall Score:** 52
+#   Overall Marketing Score: 52/100
 OVERALL_SCORE_PATTERNS = [
-    re.compile(r"\*\*Marketing Score:\*\*\s*(\d+)/100"),
-    re.compile(r"\*\*Score:\*\*\s*(\d+)/100"),
-    re.compile(r"\*\*Overall Marketing Score:\s*(\d+)/100\s*", re.IGNORECASE),
-    re.compile(r"^Overall Marketing Score:\s*(\d+)/100", re.MULTILINE | re.IGNORECASE),
-    re.compile(r"^\*\*Score:\*\*\s*(\d+)/100", re.MULTILINE),
+    re.compile(
+        r"(?:\*\*)?(?:Overall(?:\s+Marketing)?\s+Score|Marketing\s+Score|Score)(?:\*\*)?"
+        r"[:\s\*]+(\d{1,3})\s*(?:/\s*100)?\b",
+        re.IGNORECASE,
+    ),
 ]
 
-# Category score row in the breakdown table
+# Category score row in the breakdown table.
+# Accepts these formats:
+#   | Content & Messaging | 55/100 | 25% | ...
+#   | **Content & Messaging** | 25% | 55 | ...     ← score in column 3
+#   | Content & Messaging | 55 / 100 | ...         ← spaces around slash
+# The scan finds the category name, then takes the FIRST 2-3 digit number
+# in the same row (after stripping percentages) as the score.
 CATEGORY_SCORE_ROW = re.compile(
-    r"\|\s*(?:\*\*)?(Content & Messaging|Conversion Optimization|SEO & Discoverability|Competitive Positioning|Brand & Trust|Growth & Strategy)(?:\*\*)?\s*\|\s*(\d+)/100",
+    r"\|\s*(?:\*\*)?(Content & Messaging|Conversion Optimization|"
+    r"SEO & Discoverability|Competitive Positioning|Brand & Trust|"
+    r"Growth & Strategy)(?:\*\*)?\s*\|([^\n]+)",
     re.IGNORECASE,
 )
+
+
+def _extract_score_from_row(remainder: str) -> int | None:
+    """Given the cells AFTER the category cell, extract the score (0-100).
+
+    Skips anything ending in % (those are weights), takes the first remaining
+    integer in 0..100 range. Tolerates `55/100`, `55 / 100`, or bare `55`.
+    """
+    # remove weighted-score cells like "13.75" by requiring integer
+    cells = [c.strip().lstrip("*").rstrip("*").strip() for c in remainder.split("|")]
+    for cell in cells:
+        if not cell or cell.endswith("%"):
+            continue
+        m = re.match(r"^(\d{1,3})(?:\s*/\s*100)?$", cell)
+        if m:
+            n = int(m.group(1))
+            if 0 <= n <= 100:
+                return n
+    return None
 
 # Internal markdown link pattern
 MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
@@ -244,8 +275,14 @@ def check_category_scores(bin_dir: Path) -> CheckResult:
         return CheckResult(name="Per-category scores present", passed=False,
                            issues=[Issue("Critical", "category-scores", "MARKETING-AUDIT.md missing")])
     text = audit_path.read_text(encoding="utf-8")
-    matches = CATEGORY_SCORE_ROW.findall(text)
-    seen = {cat: int(score) for cat, score in matches}
+    seen: dict[str, int] = {}
+    for cat_match in CATEGORY_SCORE_ROW.finditer(text):
+        cat = cat_match.group(1)
+        if cat in seen:
+            continue
+        score = _extract_score_from_row(cat_match.group(2))
+        if score is not None:
+            seen[cat] = score
     expected = {"Content & Messaging", "Conversion Optimization", "SEO & Discoverability",
                 "Competitive Positioning", "Brand & Trust", "Growth & Strategy"}
     seen_normalized = {k.title(): v for k, v in seen.items()}

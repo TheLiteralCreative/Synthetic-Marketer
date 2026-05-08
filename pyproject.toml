@@ -20,11 +20,14 @@ dependencies = [
 
 [project.optional-dependencies]
 # Pulled in for B2 (pipeline runner)
+# Note: pivoted from "Claude Agent SDK" (not yet on PyPI) to direct anthropic SDK.
+# Skills are read as prompt templates from ~/.claude/skills/ — full control,
+# no extra dependency, and we sidestep the Claude Code permissions layer entirely
+# (no bypass needed when we never go through it).
 pipeline = [
-  "claude-agent-sdk>=0.1",
+  "anthropic>=0.40",
   "sse-starlette>=2.1",
   "aiofiles>=24.1",
-  "anthropic>=0.40",
 ]
 
 # Used by tools/discover.py for performance metrics (PSI is via stdlib urllib;
