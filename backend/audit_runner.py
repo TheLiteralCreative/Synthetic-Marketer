@@ -50,6 +50,28 @@ def _estimate_cost(model: str, tokens_in: int, tokens_out: int) -> float:
     return (tokens_in * in_rate + tokens_out * out_rate) / 1_000_000
 
 
+def _estimate_remaining_cost(digest_chars: int, model: str) -> float:
+    """Rough estimate of Phases 2-8 cost based on digest size.
+
+    Calibrated from two real Haiku audits:
+      example.com  (1.8K digest)  -> $0.26
+      hewittgc.com (19K digest)   -> $1.02
+    Linear fit yields ~$0.18 base + ~$0.044 per KB of digest. Sonnet and
+    Opus scale roughly linearly with their pricing ratios. Estimate is
+    intentionally rough — it's a heads-up, not a quote.
+    """
+    digest_kb = digest_chars / 1024
+    haiku_cost = 0.18 + 0.044 * digest_kb
+    m = model.lower()
+    if "haiku" in m:
+        return haiku_cost
+    if "sonnet" in m:
+        return haiku_cost * 3.0
+    if "opus" in m:
+        return haiku_cost * 15.0
+    return haiku_cost * 3.0  # default to Sonnet-tier ratio
+
+
 # ----------------------------------------------------------------------------
 # anthropic helpers
 # ----------------------------------------------------------------------------
@@ -92,16 +114,21 @@ async def _call_claude(
 # Phase implementations
 # ----------------------------------------------------------------------------
 
-async def _phase1_discovery(url: str, bin_dir: Path, job_id: str, do_psi: bool) -> str:
-    """Pure Python — call discover.py. Return digest text."""
+async def _phase1_discovery(url: str, bin_dir: Path, job_id: str, do_psi: bool, model: str) -> str:
+    """Pure Python — call discover.py. Return digest text.
+
+    Emits an estimated remaining cost in the Phase 1 done-detail so the user
+    sees a heads-up before the expensive phases run.
+    """
     progress.phase(job_id, 1, "running", f"Crawling {url}")
-    # Run blocking discover() in a thread so we don't block the event loop
     await asyncio.to_thread(discover.discover, url, bin_dir, do_psi=do_psi)
     digest_path = bin_dir / "_DIGEST.md"
     if not digest_path.exists():
         raise RuntimeError("Discovery did not produce _DIGEST.md")
     digest = digest_path.read_text(encoding="utf-8")
-    progress.phase(job_id, 1, "done", f"{len(digest)} chars")
+    est = _estimate_remaining_cost(len(digest), model)
+    progress.phase(job_id, 1, "done",
+                   f"{len(digest):,} chars · phases 2–8 est. ~${est:.2f}")
     return digest
 
 
@@ -386,7 +413,7 @@ async def run_audit(
     progress.log(job_id, f"Starting audit of {url} (model={model})")
 
     try:
-        digest = await _phase1_discovery(url, bin_dir, job_id, do_psi)
+        digest = await _phase1_discovery(url, bin_dir, job_id, do_psi, model)
         subagents = await _phase2_subagents(client, url, digest, job_id, model)
         audit_text = await _phase3_aggregate(client, url, digest, subagents, bin_dir, job_id, model)
         await _phase4_companions(client, url, audit_text, bin_dir, brand, job_id, model)
