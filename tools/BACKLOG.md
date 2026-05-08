@@ -61,3 +61,14 @@ Ideas considered but deferred. Each has been judged "would add real quality if a
 When a backlog item becomes a "yes, build it now," document the decision here:
 
 - 2026-05-08: Built items 1 (Lighthouse via PSI) and 2 (QA pass agent) ahead of GUI work. They were the two ideas judged most likely to materially change deliverable quality. Original list of 10 ideas — 2 promoted, 8 remain in backlog above.
+
+- 2026-05-08: GUI shipped (B1–B5). FastAPI + React, single-command launch. All `tools/` scripts remain runnable headless; the GUI just wraps them.
+
+- 2026-05-08: Mid-flight fix — `tools/discover.py` v0.3.0 surfaces page content excerpts (testimonials, blockquotes, hero copy) in `_DIGEST.md`. The original metadata-only digest was systematically blind to actual prose, causing the Brand & Trust subagent to miss a prominent testimonial on a real audit (hewittgc.com). Promoted "real content in digest" from latent issue to shipped fix.
+
+- 2026-05-08: Three runtime bugs fixed during real-use shakedown:
+  1. Cost meter inflated due to SSE replays double-counting cost events. Backend now emits cumulative totals; frontend reducer SETs (no longer ADDs); EventSource closes itself on `done`/`error`.
+  2. Brand-name input wasn't sanitized before bin folder creation. `&` and other unsafe chars now stripped/replaced before `Synth-mkt_<Brand>_<date>` is formed.
+  3. QA cross-audit-reference regex was too loose ("across all communications. Audit finding..." false-positively tripped). Tightened to require `audits?` within ≤2 words of trigger phrase.
+
+- 2026-05-08: Added per-audit cost heads-up — after Phase 1 completes, the runner emits an estimated cost for Phases 2–8 based on digest size + selected model. Calibrated against two real Haiku audits ($0.26 small / $1.02 medium-large). Not a confirmation gate — just visibility before the expensive part runs.

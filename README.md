@@ -32,26 +32,33 @@ Each audit produces a **composite Marketing Score (0–100)** weighted across si
 
 ## Quickstart
 
+There are two ways to run an audit. **The GUI is the recommended path.**
+
+### Option A — GUI (recommended)
+
 ```bash
-# 1. Create a date-stamped project bin
-BIN="Synth-mkt_<Brand>_$(date +%Y%m%d)"
-mkdir "$BIN"
+# One-time setup
+pip install -e .                       # backend deps
+cd frontend && npm install && cd ..    # frontend deps
 
-# 2. Run discovery (fetches site, validates schema, runs PageSpeed Insights)
-python3 tools/discover.py https://target-site.example.com "$BIN"
+# Run the app
+python3 start.py
+```
 
-# 3. Run the audit pipeline (5 parallel subagents)
-#    Currently runs inside Claude Code via the /market audit skill.
-#    A standalone CLI / GUI is in development.
+The browser auto-opens to `http://localhost:8000`. Set your Anthropic API key in **Settings**, then go to **New audit**, enter a URL, pick a model (Haiku for speed/cost, Opus for depth), and hit **Run**. The In-Progress view streams phase-by-phase status with live cost meter; on completion it routes to the audit detail view with score gauge, category breakdown, top findings, and one-click access to every deliverable PDF.
 
-# 4. After deliverables are written, run QA pass
-python3 tools/qa.py "$BIN"
+Past audits live in **All audits** — sortable by score / date / QA status. From any audit detail you can re-render PDFs or open the bin folder in Finder/Explorer.
 
-# 5. Generate the dashboard PDF
-#    Currently runs via /market report-pdf skill
+### Option B — CLI (for scripting / headless use)
 
-# 6. Render human-friendly PDFs of every markdown
-python3 tools/md_to_pdf.py "$BIN"
+```bash
+# Single command — runs all 8 phases end-to-end
+python3 -m backend.audit_runner https://target-site.example.com Synth-mkt_<Brand>_$(date +%Y%m%d)
+
+# Or run individual phases manually:
+python3 tools/discover.py <url> <bin>      # Phase 1 only
+python3 tools/qa.py <bin>                  # Phase 6 (QA pass)
+python3 tools/md_to_pdf.py <bin>           # Phase 8 (human-friendly PDFs)
 ```
 
 The pipeline is designed for **personal-tool use** — run by a trusted operator against websites the operator wants to analyze. It is not currently designed as a multi-tenant SaaS.
@@ -82,11 +89,15 @@ For the full pipeline specification, hard rules, voice rules, and the discovery 
 
 | File | Role |
 |---|---|
-| [`tools/discover.py`](tools/discover.py) | Automated discovery — site crawl, schema validation, robots.txt audit, PageSpeed Insights via Lighthouse API, NAP extraction, social-link inventory |
+| [`start.py`](start.py) | Single-command launcher — builds the frontend if needed, starts FastAPI on `localhost:8000`, opens the browser |
+| [`backend/`](backend/) | FastAPI app + audit pipeline orchestrator. Runs all 8 phases via the Anthropic SDK, emits SSE progress events, exposes `/api/audits` + `/api/bins` endpoints |
+| [`frontend/`](frontend/) | React (Vite) SPA with five views: New audit, In-progress, All audits, Audit detail, Settings. Built and served as static by FastAPI |
+| [`tools/discover.py`](tools/discover.py) | Automated discovery — site crawl, schema validation, robots.txt audit, PageSpeed Insights via Lighthouse API, content-excerpt extraction (testimonials, hero copy), NAP extraction, social-link inventory |
 | [`tools/qa.py`](tools/qa.py) | Pre-shipping QA pass — 10 mechanical checks for cross-audit refs, score consistency, brand-name leakage, broken links, placeholder content |
-| [`tools/md_to_pdf.py`](tools/md_to_pdf.py) | Markdown-to-PDF rendering via headless Chrome — produces per-markdown PDFs and a bundled FULL-REPORT.pdf with cover + TOC |
+| [`tools/md_to_pdf.py`](tools/md_to_pdf.py) | Markdown-to-PDF rendering via headless Chrome / Edge / Chromium — produces per-markdown PDFs and a bundled FULL-REPORT.pdf with cover + TOC |
 | [`tools/AUDIT-PROCESS.md`](tools/AUDIT-PROCESS.md) | Full pipeline specification — file naming, hard rules (incl. the no-cross-audit-references rule), discovery checklist, QA checks |
 | [`tools/BACKLOG.md`](tools/BACKLOG.md) | Deferred enhancements with effort estimates and decision log |
+| [`docs/GUI-PLAN.md`](docs/GUI-PLAN.md) | The GUI architecture and build plan (now shipped). Useful as a reference for how the GUI was scoped and structured |
 
 ---
 
@@ -135,14 +146,16 @@ Default is 3 pages (homepage + 2 highest-priority interior pages selected by URL
 
 | Component | Used for | Install |
 |---|---|---|
-| Python 3.10+ | All scripts (`discover.py`, `qa.py`, `md_to_pdf.py`) | system |
-| `markdown` Python package | HTML rendering for PDFs | `pip install markdown` |
-| `reportlab` Python package | Dashboard PDF generation | `pip install reportlab` |
-| Google Chrome | Headless rendering for PDFs | system app |
-| `curl` | Page fetching with realistic User-Agent | system |
-| Claude Code (currently) | LLM subagent orchestration in Phases 2, 3, 4, 5 | `claude.com/code` |
+| Python 3.9+ | Backend, scripts, audit pipeline | system |
+| Node.js 18+ | Frontend build (Vite + React) | https://nodejs.org |
+| `pip install -e .` | Pulls in FastAPI, Uvicorn, Pydantic, Anthropic SDK, ReportLab, Markdown, sse-starlette, aiofiles | from project root |
+| Google Chrome / Chromium / Edge | Headless rendering for PDFs (any one is fine) | system app |
+| `curl` | Page fetching with realistic User-Agent | system (preinstalled on macOS / Linux) |
+| Anthropic API key | LLM subagent orchestration in Phases 2, 3, 4, 5, 7 | https://console.anthropic.com |
 
-A standalone CLI / GUI that decouples the pipeline from Claude Code interactive use is in development — see [`tools/BACKLOG.md`](tools/BACKLOG.md).
+**Anthropic API cost per audit:** $0.25–$1.50 with Haiku for typical small/medium sites; $1–$4 with Sonnet; $3–$15 with Opus. The In-Progress view shows the running cost during every audit, and Phase 1 emits a per-site estimate before the expensive phases run.
+
+**Cross-platform:** macOS (primary), Windows, Linux. Chrome path detection is auto-discovered via standard install paths and `$PATH`. Override with `CHROME_BIN=/path/to/binary` if needed.
 
 ---
 
@@ -183,14 +196,16 @@ Synth-mkt_<Brand>_<YYYYMMDD>/
 
 | Component | Status |
 |---|---|
-| Discovery script (`discover.py`) | ✅ v0.2.0 — production |
+| Discovery script (`discover.py`) | ✅ v0.3.0 — production (now extracts page content excerpts too) |
 | QA pass (`qa.py`) | ✅ v0.1.0 — production |
-| PDF rendering (`md_to_pdf.py`) | ✅ production |
-| Audit pipeline (subagent orchestration) | ✅ runs inside Claude Code |
-| Standalone CLI / GUI | 🚧 in development |
-| Performance metrics (Lighthouse / PSI) | ✅ integrated, requires API key for production |
+| PDF rendering (`md_to_pdf.py`) | ✅ production (cross-platform: macOS / Windows / Linux) |
+| Audit pipeline (`backend/audit_runner.py`) | ✅ production — full 8-phase orchestration via Anthropic SDK |
+| **GUI** (`backend/` + `frontend/`) | ✅ **shipped** — FastAPI + React, single-command launch via `python3 start.py` |
+| Performance metrics (Lighthouse / PSI) | ✅ integrated; set `PAGESPEED_API_KEY` for production volume |
+| Cost-meter heads-up after Phase 1 | ✅ projects estimated remaining cost based on digest size + selected model |
 | Search Console / Analytics integration | 📋 backlog |
 | Re-audit / delta tracking | 📋 backlog |
+| Brand voice profile deliverable | 📋 backlog |
 
 See [`tools/BACKLOG.md`](tools/BACKLOG.md) for the full deferred-features list.
 

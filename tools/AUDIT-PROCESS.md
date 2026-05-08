@@ -8,6 +8,14 @@ The complete pipeline spec for producing a marketing audit deliverable bundle. R
 
 A complete audit produces **7 markdown deliverables + matching PDFs + 1 dashboard summary PDF + 1 bundled FULL-REPORT PDF + 1 QA report** in a date-stamped project bin.
 
+The pipeline can be invoked three ways — **the GUI is the recommended path for interactive use**:
+
+1. **GUI** — `python3 start.py` opens a browser-based form. Pick model + URL, watch progress, click straight through to deliverables. See [README.md → Quickstart](../README.md).
+2. **CLI** — `python3 -m backend.audit_runner <url> <bin>` runs the full 8-phase pipeline headless. Useful for scripting / batch runs.
+3. **Step-by-step** — call `tools/discover.py`, `tools/qa.py`, `tools/md_to_pdf.py` individually if you want to override or interleave manual edits.
+
+All three call the same underlying functions and produce identical bin structures.
+
 | Phase | What | Tool / Skill | Output |
 |---|---|---|---|
 | 0 | Create project bin | `mkdir Synth-mkt_<Brand>_<YYYYMMDD>` | empty folder |

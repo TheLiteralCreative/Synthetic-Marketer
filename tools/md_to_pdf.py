@@ -30,10 +30,21 @@ from pathlib import Path
 import markdown
 
 CHROME_BIN_CANDIDATES = [
+    # macOS
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    # Windows — common install paths
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    # Linux / WSL / anything on PATH
     shutil.which("google-chrome") or "",
+    shutil.which("google-chrome-stable") or "",
     shutil.which("chromium") or "",
+    shutil.which("chromium-browser") or "",
+    shutil.which("microsoft-edge") or "",
     shutil.which("chrome") or "",
 ]
 
@@ -214,11 +225,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 def find_chrome() -> str:
+    # Allow explicit override
+    env = os.environ.get("CHROME_BIN")
+    if env and Path(env).exists():
+        return env
     for cand in CHROME_BIN_CANDIDATES:
         if cand and Path(cand).exists():
             return cand
     raise RuntimeError(
-        "Could not find Google Chrome or Chromium. Install Chrome or set CHROME_BIN."
+        "Could not find Google Chrome, Chromium, or Edge. "
+        "Install one or set CHROME_BIN to a binary path."
     )
 
 
