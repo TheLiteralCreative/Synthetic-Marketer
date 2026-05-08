@@ -1,0 +1,46 @@
+[project]
+name = "synthetic-marketer"
+version = "0.1.0"
+description = "Local-first marketing audit pipeline."
+requires-python = ">=3.9"
+license = { text = "Proprietary" }
+authors = [{ name = "TheLiteralCreative" }]
+
+dependencies = [
+  # Existing tools
+  "markdown>=3.9",
+  "reportlab>=4.0",
+
+  # B1 — Backend foundation
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "pydantic>=2.9",
+  "python-multipart>=0.0.12",
+]
+
+[project.optional-dependencies]
+# Pulled in for B2 (pipeline runner)
+pipeline = [
+  "claude-agent-sdk>=0.1",
+  "sse-starlette>=2.1",
+  "aiofiles>=24.1",
+  "anthropic>=0.40",
+]
+
+# Used by tools/discover.py for performance metrics (PSI is via stdlib urllib;
+# only needed if you swap to direct Lighthouse local install)
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.7",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["backend*", "tools*"]

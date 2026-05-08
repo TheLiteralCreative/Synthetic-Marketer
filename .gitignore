@@ -6,7 +6,19 @@
 # Workspace artifacts not part of the tool
 /ads-skills/
 # Note: /docs/ at root IS tracked (project documentation lives there).
-# Old session-log subfolder gets ignored by the per-bin rule below.
+
+# GUI runtime data (settings.json, jobs.db, etc.) — local to each install
+/data/
+
+# Frontend build artifacts and dependencies
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.vite/
+
+# Python build / packaging
+build/
+dist/
+*.egg-info/
 
 # Discovery raw cache (if ever placed at project root rather than inside a bin)
 /raw/
