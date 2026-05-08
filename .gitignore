@@ -5,7 +5,8 @@
 
 # Workspace artifacts not part of the tool
 /ads-skills/
-/docs/
+# Note: /docs/ at root IS tracked (project documentation lives there).
+# Old session-log subfolder gets ignored by the per-bin rule below.
 
 # Discovery raw cache (if ever placed at project root rather than inside a bin)
 /raw/
