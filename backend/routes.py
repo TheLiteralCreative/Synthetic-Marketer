@@ -69,8 +69,13 @@ async def create_audit(payload: CreateAuditRequest) -> dict:
     if not api_key:
         raise HTTPException(400, "Anthropic API key not configured. Set in Settings.")
 
-    # Derive brand and bin_dir
-    brand = payload.brand or _derive_brand(payload.url)
+    # Derive brand from URL if not provided, then sanitize.
+    # Sanitization rules: keep alphanumerics + hyphens. Replace `&` with "And"
+    # before stripping (so "Hewitt-Garden&Design" becomes "Hewitt-GardenAndDesign"
+    # not "Hewitt-GardenDesign"). Underscores are reserved as bin-name separators.
+    raw_brand = payload.brand or _derive_brand(payload.url)
+    brand = raw_brand.replace("&", "And").replace("_", "-")
+    brand = re.sub(r"[^A-Za-z0-9\-]+", "", brand).strip("-") or "Audit"
     date = time.strftime("%Y%m%d")
     bin_name = f"Synth-mkt_{brand}_{date}"
     output_folder = Path(cfg.get("output_folder") or ROOT)

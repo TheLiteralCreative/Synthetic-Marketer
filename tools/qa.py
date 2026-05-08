@@ -47,15 +47,20 @@ OPTIONAL_FILES = [
     "_DISCOVERY-NOTES.md",
 ]
 
-# Cross-audit-reference patterns from AUDIT-PROCESS.md Rule 1
+# Cross-audit-reference patterns from AUDIT-PROCESS.md Rule 1.
+# Each pattern is intentionally tight — false positives caused real shipping
+# blocks (e.g. "across all communications. Audit finding..." used to false-trip
+# a regex with a non-greedy `.*?` gap; same-line "audit" anywhere matched).
+# Fix: require "audit(s)" to appear within a small word-bounded window
+# (≤2 words) of the trigger phrase.
 CROSS_AUDIT_PATTERNS = [
-    (r"\bacross all (?:.*?)audits?\b", "across-all-audits framing"),
-    (r"\bboth audits flagged\b", "both-audits-flagged framing"),
+    (r"\bacross all (?:\w+\s+){0,2}audits?\b", "across-all-audits framing"),
+    (r"\bboth audits\b", "both-audits framing"),
     (r"\bprior audits?\b", "prior-audit reference"),
     (r"\bprevious audits?\b", "previous-audit reference"),
     (r"\bother audits?\b", "other-audit reference"),
     (r"\bin this engagement\b", "this-engagement framing"),
-    (r"\bof any audit produced\b", "of-any-audit-produced framing"),
+    (r"\bof any audit (?:\w+\s+){0,3}(?:produced|so far|to date|run)\b", "of-any-audit-produced framing"),
     (r"\btwo prior audits?\b", "two-prior-audits framing"),
     (r"\bSynth-mkt_[A-Za-z0-9_]+/", "filesystem-path reference to another bin"),
     (r"\bsibling brand to\b", "sibling-brand framing"),

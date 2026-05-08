@@ -50,12 +50,14 @@ function reducer(state, ev) {
       };
     }
     case 'cost': {
+      // Cost events now emit CUMULATIVE totals (not deltas).
+      // SET, never add — replays from SSE reconnects can't double-count.
       return {
         ...state,
         cost: {
-          tokensIn: state.cost.tokensIn + (ev.cost_tokens_in || 0),
-          tokensOut: state.cost.tokensOut + (ev.cost_tokens_out || 0),
-          costUsd: state.cost.costUsd + (ev.cost_usd || 0),
+          tokensIn: ev.cost_tokens_in ?? state.cost.tokensIn,
+          tokensOut: ev.cost_tokens_out ?? state.cost.tokensOut,
+          costUsd: ev.cost_usd ?? state.cost.costUsd,
         },
       };
     }

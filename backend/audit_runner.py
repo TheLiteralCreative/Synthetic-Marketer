@@ -62,7 +62,12 @@ async def _call_claude(
     max_tokens: int = 8192,
     job_id: Optional[str] = None,
 ) -> tuple[str, int, int]:
-    """Single anthropic call. Returns (text, in_tokens, out_tokens)."""
+    """Single anthropic call. Returns (text, in_tokens, out_tokens).
+
+    Emits a cost event with the job's CUMULATIVE totals (not the per-call delta)
+    so the SSE stream is idempotent — if the client reconnects and replays the
+    log, repeated cost events don't double-count in the reducer.
+    """
     resp = await client.messages.create(
         model=model,
         max_tokens=max_tokens,
@@ -74,8 +79,12 @@ async def _call_claude(
     in_tok = resp.usage.input_tokens
     out_tok = resp.usage.output_tokens
     if job_id:
-        job_queue.add_cost(job_id, in_tok, out_tok, _estimate_cost(model, in_tok, out_tok))
-        progress.cost(job_id, in_tok, out_tok, _estimate_cost(model, in_tok, out_tok))
+        delta_usd = _estimate_cost(model, in_tok, out_tok)
+        job_queue.add_cost(job_id, in_tok, out_tok, delta_usd)
+        # Emit CUMULATIVE totals so reconnects/replays don't double-count
+        job = job_queue.get(job_id)
+        if job:
+            progress.cost(job_id, job.cost_tokens_in, job.cost_tokens_out, job.cost_usd)
     return text, in_tok, out_tok
 
 

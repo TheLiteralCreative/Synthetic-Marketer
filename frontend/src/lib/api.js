@@ -38,14 +38,17 @@ export const api = {
  * Returns an unsubscribe function.
  *
  * onEvent receives parsed event objects: { kind, phase, status, detail, ... }
+ *
+ * IMPORTANT: When a `done` or `error` event arrives, this function closes the
+ * EventSource so the browser doesn't auto-reconnect. Without this, the server
+ * keeps replaying the event log on every reconnect — historically caused the
+ * cost meter to inflate without bound.
  */
 export function subscribeToAudit(jobId, onEvent, onError) {
   const url = `/api/audits/${jobId}/stream`;
   const source = new EventSource(url);
+  let closed = false;
 
-  // The backend uses sse-starlette's typed events: phase, subagent, log,
-  // cost, done, error. EventSource fires named-event listeners separately
-  // from the default 'message' listener.
   const KINDS = ['phase', 'subagent', 'log', 'cost', 'done', 'error'];
   const handlers = {};
 
@@ -54,6 +57,12 @@ export function subscribeToAudit(jobId, onEvent, onError) {
       try {
         const data = JSON.parse(e.data);
         onEvent({ kind, ...data });
+        // Terminal events: close the connection ourselves so EventSource
+        // doesn't auto-reconnect into a replay loop.
+        if (kind === 'done' || kind === 'error') {
+          closed = true;
+          source.close();
+        }
       } catch (err) {
         // ignore parse errors
       }
@@ -62,12 +71,13 @@ export function subscribeToAudit(jobId, onEvent, onError) {
   }
 
   source.onerror = (e) => {
-    if (source.readyState === EventSource.CLOSED && onError) {
+    if (!closed && source.readyState === EventSource.CLOSED && onError) {
       onError(e);
     }
   };
 
   return () => {
+    closed = true;
     for (const kind of KINDS) {
       source.removeEventListener(kind, handlers[kind]);
     }
