@@ -1,0 +1,78 @@
+# Project bins (per-audit deliverables — kept local, not committed)
+# Each audit produces a date-stamped bin like Synth-mkt_<Brand>_<YYYYMMDD>/
+# Bins contain analyses of real businesses; the tool itself stays brand-agnostic.
+/Synth-mkt_*/
+
+# Workspace artifacts not part of the tool
+/ads-skills/
+/docs/
+
+# Discovery raw cache (if ever placed at project root rather than inside a bin)
+/raw/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / build
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+credentials.json
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.directory
+
+# IDE / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# Claude Code local settings (machine-specific allowlists, env vars)
+# Shared project settings should live at .claude/settings.json (committed).
+.claude/settings.local.json
+
+# Temporary / scratch
+*.tmp
+*.bak
+*.log
+.cache/
