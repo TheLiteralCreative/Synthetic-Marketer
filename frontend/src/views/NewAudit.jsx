@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 
 const MODELS = [
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5 — fastest, cheapest (~$0.25/audit)', cost: 'low' },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6 — balanced (~$0.75/audit)', cost: 'med' },
-  { id: 'claude-opus-4-7', label: 'Opus 4.7 — deepest analysis (~$3-4/audit)', cost: 'high' },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5 — fastest, cheapest' },
+  { id: 'claude-sonnet-4-6',         label: 'Sonnet 4.6 — balanced' },
+  { id: 'claude-opus-4-7',           label: 'Opus 4.7 — deepest analysis' },
 ];
 
 export default function NewAudit() {
