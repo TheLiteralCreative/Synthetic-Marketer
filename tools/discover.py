@@ -113,6 +113,24 @@ PLATFORM_SIGNATURES = [
 # Schema sub-types worth flagging (generic LocalBusiness should usually be specialized)
 GENERIC_LOCALBUSINESS_TYPES = {"LocalBusiness", "Organization"}
 
+# Class-name keywords that identify testimonial / quote / review sections in
+# the HTML. Discovery extracts the inner text of any element whose class
+# attribute contains any of these substrings (case-insensitive). This is the
+# fix for the "audit said no testimonials when one was prominently displayed"
+# bug — the digest now surfaces actual prose content, not just metadata.
+TESTIMONIAL_CLASS_KEYWORDS = [
+    "testimonial", "review-card", "review-quote", "customer-quote",
+    "client-quote", "quote-section", "what-they-say", "what-customers-say",
+    "what-clients-say", "customer-review",
+]
+
+# Per-page caps so the digest stays manageable (~1.5–2x growth, not 10x).
+MAX_TESTIMONIALS_PER_PAGE = 6
+MAX_BLOCKQUOTES_PER_PAGE = 4
+MAX_EXCERPT_CHARS = 600
+MIN_EXCERPT_CHARS = 30
+HERO_LEAD_MAX_CHARS = 400
+
 # ----------------------------------------------------------------------------
 # Fetching
 # ----------------------------------------------------------------------------
@@ -350,6 +368,159 @@ def detect_platform(html: str) -> str | None:
         if re.search(pattern, html, re.IGNORECASE):
             return name
     return None
+
+
+# ----------------------------------------------------------------------------
+# Content excerpt extraction (testimonials, blockquotes, hero copy)
+# ----------------------------------------------------------------------------
+
+VOID_HTML_ELEMENTS = {
+    "area", "base", "br", "col", "embed", "hr", "img", "input",
+    "link", "meta", "param", "source", "track", "wbr",
+}
+
+# Regex for "any opening tag with a class attribute"
+_CLASSED_OPEN = re.compile(
+    r'<(\w+)\b[^>]*?\bclass\s*=\s*"([^"]*)"[^>]*>',
+    re.IGNORECASE,
+)
+
+
+def _strip_html_to_text(fragment: str) -> str:
+    """Remove tags and HTML entities, collapse whitespace."""
+    # Drop scripts/styles entirely first
+    fragment = re.sub(
+        r"<(script|style|noscript|svg)\b[^>]*>.*?</\1>",
+        " ", fragment, flags=re.DOTALL | re.IGNORECASE,
+    )
+    text = re.sub(r"<[^>]+>", " ", fragment)
+    # Decode common entities
+    text = text.replace("&nbsp;", " ").replace("&amp;", "&")
+    text = text.replace("&quot;", '"').replace("&apos;", "'")
+    text = text.replace("&lt;", "<").replace("&gt;", ">")
+    text = re.sub(r"&#8220;|&#8221;|&ldquo;|&rdquo;", '"', text)
+    text = re.sub(r"&#8216;|&#8217;|&lsquo;|&rsquo;", "'", text)
+    text = re.sub(r"&#8211;|&#8212;|&ndash;|&mdash;", "—", text)
+    text = re.sub(r"&#\d+;", " ", text)  # drop other numeric entities
+    text = re.sub(r"&[a-zA-Z]+;", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _find_matching_close(html: str, tag: str, start_pos: int) -> int:
+    """Given the position right after an opening <tag>, return the index of
+    the matching </tag>'s '<' character. Returns -1 if no match found.
+    Handles nested same-name tags via depth counting.
+    """
+    if tag.lower() in VOID_HTML_ELEMENTS:
+        return -1
+    depth = 1
+    pos = start_pos
+    open_re = re.compile(rf"<{tag}\b[^>]*>", re.IGNORECASE)
+    close_re = re.compile(rf"</{tag}>", re.IGNORECASE)
+    while pos < len(html) and depth > 0:
+        next_open = open_re.search(html, pos)
+        next_close = close_re.search(html, pos)
+        if not next_close:
+            return -1
+        if next_open and next_open.start() < next_close.start():
+            depth += 1
+            pos = next_open.end()
+        else:
+            depth -= 1
+            if depth == 0:
+                return next_close.start()
+            pos = next_close.end()
+    return -1
+
+
+def _classed_sections(html: str, class_keywords: list[str]) -> list[str]:
+    """Return inner-text of every element whose class contains any keyword."""
+    keywords_lower = [k.lower() for k in class_keywords]
+    found_ranges: list[tuple[int, int]] = []
+    out: list[str] = []
+    pos = 0
+    while True:
+        m = _CLASSED_OPEN.search(html, pos)
+        if not m:
+            break
+        cls = m.group(2).lower()
+        if any(k in cls for k in keywords_lower):
+            tag = m.group(1).lower()
+            close_pos = _find_matching_close(html, tag, m.end())
+            if close_pos > 0:
+                # Skip if this section is fully contained inside one we already captured
+                # (avoid double-extracting nested elements — outermost wins)
+                section_start = m.start()
+                section_end = close_pos
+                contained = any(
+                    fr_s <= section_start and section_end <= fr_e
+                    for fr_s, fr_e in found_ranges
+                )
+                if not contained:
+                    found_ranges.append((section_start, section_end))
+                    inner_html = html[m.end():close_pos]
+                    text = _strip_html_to_text(inner_html)
+                    if MIN_EXCERPT_CHARS <= len(text) <= MAX_EXCERPT_CHARS:
+                        out.append(text)
+                pos = close_pos
+                continue
+        pos = m.end()
+    return out
+
+
+def _blockquote_excerpts(html: str) -> list[str]:
+    out = []
+    for m in re.finditer(
+        r"<blockquote[^>]*>(.*?)</blockquote>", html, re.DOTALL | re.IGNORECASE
+    ):
+        text = _strip_html_to_text(m.group(1))
+        if MIN_EXCERPT_CHARS <= len(text) <= MAX_EXCERPT_CHARS:
+            out.append(text)
+    return out
+
+
+def _hero_excerpt(html: str) -> dict:
+    """Capture the first H1 + the first substantial body text after it."""
+    out: dict = {}
+    h1_m = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.DOTALL | re.IGNORECASE)
+    if h1_m:
+        h1_text = _strip_html_to_text(h1_m.group(1))
+        if h1_text:
+            out["h1"] = h1_text[:200]
+        # Find the first <p> or <h2>+text following the H1 with substantial copy
+        after = html[h1_m.end():]
+        for p_m in re.finditer(
+            r"<(?:p|h2|h3)[^>]*>(.*?)</(?:p|h2|h3)>",
+            after, re.DOTALL | re.IGNORECASE,
+        ):
+            text = _strip_html_to_text(p_m.group(1))
+            if MIN_EXCERPT_CHARS <= len(text) <= HERO_LEAD_MAX_CHARS:
+                out["lead"] = text
+                break
+    return out
+
+
+def extract_content_excerpts(html: str) -> dict:
+    """Top-level: extract testimonials, blockquotes, and hero copy from HTML.
+
+    Returns dict with keys 'testimonials', 'blockquotes', 'hero'.
+    Lists are de-duplicated and per-page-capped.
+    """
+    testimonials = _classed_sections(html, TESTIMONIAL_CLASS_KEYWORDS)
+    blockquotes = _blockquote_excerpts(html)
+
+    # Dedupe: blockquotes that are already inside captured testimonial sections
+    # may show up twice. Prefer the testimonial-tagged version.
+    bq_keep = []
+    for bq in blockquotes:
+        if not any(bq in t for t in testimonials):
+            bq_keep.append(bq)
+
+    return {
+        "testimonials": testimonials[:MAX_TESTIMONIALS_PER_PAGE],
+        "blockquotes": bq_keep[:MAX_BLOCKQUOTES_PER_PAGE],
+        "hero": _hero_excerpt(html),
+    }
 
 
 def parse_robots_txt(text: str) -> dict:
@@ -691,6 +862,60 @@ def write_digest(bin_dir: Path, data: dict) -> None:
             P(f"- `{desc[:100]}` appears on: {', '.join('`'+u+'`' for u in urls)}")
         P()
 
+    # Page content excerpts (testimonials, blockquotes, hero copy)
+    pages_with_excerpts = [
+        p for p in data["pages"]
+        if p.get("status") == 200 and p.get("excerpts") and any(
+            p["excerpts"].get(k) for k in ("testimonials", "blockquotes")
+        ) or (p.get("status") == 200 and (p.get("excerpts") or {}).get("hero"))
+    ]
+    if pages_with_excerpts:
+        H(2, "Page content excerpts")
+        P("_Actual prose pulled from the crawled pages — testimonials, customer quotes,_")
+        P("_blockquotes, hero copy. Subagents read this to evaluate body copy quality,_")
+        P("_social proof presence, and voice consistency. Surfaces content that pure_")
+        P("_metadata audits (titles, schema, headings) miss._")
+        P()
+
+        # Group by type across pages for easier subagent scanning
+        all_testimonials = []
+        all_blockquotes = []
+        for p in pages_with_excerpts:
+            ex = p.get("excerpts") or {}
+            for t in ex.get("testimonials", []):
+                all_testimonials.append((p["url"], t))
+            for b in ex.get("blockquotes", []):
+                all_blockquotes.append((p["url"], b))
+
+        if all_testimonials:
+            H(3, f"Testimonials / customer quotes ({len(all_testimonials)})")
+            for url, text in all_testimonials:
+                P(f"- _(from {url})_ \"{text}\"")
+            P()
+        else:
+            H(3, "Testimonials / customer quotes")
+            P("_No testimonial-classed sections detected on any crawled page._")
+            P()
+
+        if all_blockquotes:
+            H(3, f"Blockquotes ({len(all_blockquotes)})")
+            for url, text in all_blockquotes:
+                P(f"- _(from {url})_ \"{text}\"")
+            P()
+
+        H(3, "Hero copy (per page)")
+        for p in pages_with_excerpts:
+            ex = p.get("excerpts") or {}
+            hero = ex.get("hero") or {}
+            if not hero:
+                continue
+            P(f"**`{p['url']}`**")
+            if hero.get("h1"):
+                P(f"  - H1: _{hero['h1']}_")
+            if hero.get("lead"):
+                P(f"  - Lead: {hero['lead']}")
+            P()
+
     # Schema audit
     H(2, "JSON-LD schema audit")
     P(f"**Schema types found across all pages:** {', '.join(sorted(data.get('schema_types', set()))) or '_(none)_'}")
@@ -931,7 +1156,7 @@ def write_checklist(bin_dir: Path, data: dict) -> None:
     out.write_text("\n".join(L) + "\n", encoding="utf-8")
 
 
-SCRIPT_VERSION = "0.2.0"
+SCRIPT_VERSION = "0.3.0"
 
 # PageSpeed Insights API (no key required for low volumes)
 PSI_API = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
@@ -1088,6 +1313,7 @@ def discover(url: str, bin_dir: Path, do_psi: bool = True, psi_max: int = 3) -> 
                 "images_alt_nonempty": pp.images_alt_nonempty,
                 "forms": pp.forms,
                 "links": pp.links,
+                "excerpts": extract_content_excerpts(page_html),
             })
             text_corpus_parts.append(pp.text)
             # collect schema
