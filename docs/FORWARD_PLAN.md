@@ -1,7 +1,7 @@
 # FORWARD_PLAN — Synthetic-Marketer
 
-**Last updated:** 2026-05-08
-**Current version:** GUI v0.1.0 (B5 polish complete) · `discover.py` v0.3.0 · `qa.py` v0.1.0
+**Last updated:** 2026-05-09
+**Current version:** GUI v0.1.0 (B5 polish complete) · `discover.py` v0.3.0 · `qa.py` v0.1.0 · client-facing methodology brief shipped · remote-hosting plan documented
 
 ---
 
@@ -18,7 +18,16 @@ The pipeline is in **production** for personal use. Three real audits have been 
 
 ---
 
-## Recent activity (last session — 2026-05-08)
+## Recent activity (last session — 2026-05-09)
+
+Two non-engineering deliverables shipped — a client-facing methodology brief for sales/authority use, and a documented remote-hosting plan filed as a priority backlog item. See `docs/session-log/2026-05-09.md` for full detail.
+
+Notable shipped:
+- ✓ **Client-facing methodology brief** (`docs/METHODOLOGY.md`, 2026-05-09) — durable "What / How / Why" reference doc + 25 anticipated FAQ answers. Grounds authority in the actual pipeline mechanics (six weighted categories, eight-phase flow, ten QA checks, ~30 mechanical evidence points, named precedent stack). Designed for use as a sales support asset and client onboarding brief. Not regenerated per-audit.
+- ✓ **Remote-hosting plan** (`docs/REMOTE-HOSTING.md`, 2026-05-09) — canonical reference for moving the tool from local-only to invited-collaborator access at strict zero cost. Recommends Cloudflare Tunnel + Cloudflare Access (Google OAuth + email allowlist, 50-user cap, no code changes). Documents Tailscale alternative, six rejected paths with reasons, and the trigger conditions for a future cloud refactor.
+- ✓ **BACKLOG #9** — added "Remote hosting / collaborator access" with `[PRIORITY]` flag, referencing the standalone plan.
+
+## Recent activity (prior session — 2026-05-08)
 
 GUI built end-to-end across five build phases (B1–B5) plus four mid-flight bug fixes uncovered by real-use shakedown. See `docs/session-log/2026-05-08.md` for full detail.
 
@@ -35,13 +44,17 @@ Notable shipped:
 
 In rough priority order. **None of these are blocking** — the tool works as-is and the user can simply run audits.
 
-1. **[YOU]** Run one or more real audits and observe quality in production. The fixed pipeline should now surface testimonials and other body content correctly. If new accuracy gaps surface, those become the next round of fixes.
+1. **[TOGETHER] PRIORITY — Remote hosting deployment.** Deploy Cloudflare Tunnel + Cloudflare Access per the plan in `docs/REMOTE-HOSTING.md`. Operator handles DNS / Cloudflare Zero Trust dashboard setup; Claude writes the launchd plist for `cloudflared` persistence and helps smoke-test SSE through the named tunnel. ~2 hours of work split across one operator + one Claude session, plus DNS propagation. Engage when the operator is ready to share access with the first collaborator.
 
-2. **[CLAUDE]** If/when you flag a content-extraction gap from a real audit (e.g., pricing language missed, value-prop signal missed, service descriptions), apply the same surgical pattern as the testimonial fix — add a new extraction strategy to `tools/discover.py` and surface it in `_DIGEST.md`.
+2. **[YOU]** Run one or more real audits and observe quality in production. The fixed pipeline should now surface testimonials and other body content correctly. If new accuracy gaps surface, those become the next round of fixes.
 
-3. **[YOU]** Consider getting a free Google PageSpeed Insights API key and setting `PAGESPEED_API_KEY=…` in `data/settings.json` (or `.env`). Anonymous PSI rate-limits aggressively. With a key, audits get reliable Core Web Vitals data in every run. ~5 minutes at console.cloud.google.com.
+3. **[CLAUDE]** If/when you flag a content-extraction gap from a real audit (e.g., pricing language missed, value-prop signal missed, service descriptions), apply the same surgical pattern as the testimonial fix — add a new extraction strategy to `tools/discover.py` and surface it in `_DIGEST.md`.
 
-4. **[TOGETHER]** Backlog item triage — see `tools/BACKLOG.md` for 8 deferred ideas. The two highest-impact remaining:
+4. **[YOU]** Consider getting a free Google PageSpeed Insights API key and setting `PAGESPEED_API_KEY=…` in `data/settings.json` (or `.env`). Anonymous PSI rate-limits aggressively. With a key, audits get reliable Core Web Vitals data in every run. ~5 minutes at console.cloud.google.com.
+
+5. **[YOU]** Read through `docs/METHODOLOGY.md` and direct any edits before it gets used as a sales asset. Particularly worth a sanity pass: pricing language in Q22 ("low-four-figures range"), tone calibration in section 3 ("why pay for this"), and the closing workflow description.
+
+6. **[TOGETHER]** Backlog item triage — see `tools/BACKLOG.md` for 9 deferred ideas. After remote hosting (now #9, flagged priority), the two highest-impact remaining:
    - **Brand voice profile deliverable** (BACKLOG #3) — generates a `BRAND-VOICE.md` per audit; valuable when audits feed downstream content production
    - **Re-audit / delta tracking** (BACKLOG #4) — `tools/delta.py` to compare two bins of the same brand; valuable for retainer/recurring-audit workflows
 
