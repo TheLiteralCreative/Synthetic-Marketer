@@ -54,6 +54,13 @@ Ideas considered but deferred. Each has been judged "would add real quality if a
 **Effort:** Medium per format (~1 day each). Notion is probably highest value first.
 **Status:** Deferred. Wait until a client actually requests one of these formats — guessing-ahead is over-engineering.
 
+### 9. Remote hosting / collaborator access — **[PRIORITY]**
+**Adds:** Reachable-from-anywhere access to the tool for the operator + 2–4 invited collaborators, without a public-signup product surface and without leaving the strict-zero-cost constraint. Currently the tool is local-only at `localhost:8000`.
+**How:** Cloudflare Tunnel exposes the existing local FastAPI app at a real public URL (e.g. `synthetic.scriptripper.com`); Cloudflare Access puts Google OAuth + email allowlist in front of it. Zero code changes to the tool itself. Operator's Mac becomes the server; `cloudflared` runs as a `launchd` service for persistence. Tailscale is documented as the lighter-weight alternative for the technical-collaborators case. Render free, Fly.io free, and serverless paths are explicitly disqualified — see reference doc for reasoning.
+**Effort:** Small (~2 hours of work split between operator and Claude, plus DNS propagation). The smoke-test of SSE through the named tunnel is the gating step — quick tunnels buffer SSE and would break the In-Progress view; named tunnels stream correctly in practice but require verification.
+**Reference:** Full plan, implementation steps, alternative path, rejected paths, and trigger conditions for revisiting in [`docs/REMOTE-HOSTING.md`](../docs/REMOTE-HOSTING.md).
+**Status:** **Priority** — flagged as the next infrastructure task. Engage when the operator is ready to begin sharing the tool with the first collaborator.
+
 ---
 
 ## Decision log
