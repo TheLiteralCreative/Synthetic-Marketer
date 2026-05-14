@@ -422,6 +422,16 @@ async def run_audit(
         await _phase7_dashboard_pdf(audit_text, bin_dir, brand, url, job_id)
         await _phase8_pdfs(bin_dir, job_id)
 
+        # Re-run QA after PDFs exist. The Phase 6 pass runs before Phases 7-8
+        # generate any PDFs, so the initial _QA-REPORT.md always false-flags
+        # the dashboard PDF and the 7 per-markdown PDFs as missing. Overwrite
+        # with an accurate report and refresh the Phase 6 status.
+        results, exit_code = await asyncio.to_thread(qa.run_qa, bin_dir)
+        await asyncio.to_thread(qa.write_report, bin_dir, results, exit_code)
+        status = {0: "ready to ship", 1: "warnings", 2: "critical"}[exit_code]
+        progress.phase(job_id, 6, "done", f"QA: {status}")
+        qa_result = {"exit_code": exit_code, "status": status}
+
         # Final score from MARKETING-AUDIT.md
         score = _extract_int(r"\b(\d{1,3})\s*/\s*100\b", audit_text)
         job_queue.mark_done(job_id, score=score)

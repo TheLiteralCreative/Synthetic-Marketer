@@ -18,7 +18,7 @@ All three call the same underlying functions and produce identical bin structure
 
 | Phase | What | Tool / Skill | Output |
 |---|---|---|---|
-| 0 | Create project bin | `mkdir Synth-mkt_<Brand>_<YYYYMMDD>` | empty folder |
+| 0 | Create project bin under `Active-Audits/`; demote any same-brand existing Active folder to `Legacy-Audits/<bin>_<N>` | GUI does this automatically; CLI takes a path arg | empty folder |
 | 1 | Discovery (incl. Lighthouse via PSI) | `python3 tools/discover.py <url> <bin>` | `bin/_DIGEST.md`, `bin/_DISCOVERY-NOTES.md`, `bin/raw/*.html` |
 | 2 | 5 parallel audit subagents | spawned by `/market audit` orchestration logic | scored analysis per category |
 | 3 | Aggregate audit | hand-written | `bin/MARKETING-AUDIT.md` |
@@ -38,6 +38,11 @@ All three call the same underlying functions and produce identical bin structure
 - `<Brand>` is the cleanest brand-name token (e.g., `CAPSTONE`, `FlexentFreight`, `GuildHouse`)
 - `<YYYYMMDD>` is the audit date in 4-digit-year-month-day format
 - Hyphens within `<Brand>` are acceptable; spaces are not
+
+**Bin location:**
+- Newly produced bins land in `<output_folder>/Active-Audits/`. The folder is created on first run.
+- When a fresh audit is launched against a brand that already has an Active folder, the existing folder is moved to `<output_folder>/Legacy-Audits/` with an iteration suffix appended: `Synth-mkt_<Brand>_<YYYYMMDD>_<N>`. `<N>` is the count of Legacy folders for that brand including the one being added (so the first demotion is `_1`, the next `_2`, etc.). The brand match is **case-insensitive**.
+- `Legacy-Audits/` is archive-only — the GUI's audit list shows Active only.
 
 **Standard files inside the bin:**
 

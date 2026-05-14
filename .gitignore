@@ -1,7 +1,13 @@
 # Project bins (per-audit deliverables — kept local, not committed)
 # Each audit produces a date-stamped bin like Synth-mkt_<Brand>_<YYYYMMDD>/
+# Bins live under Active-Audits/ (current) and Legacy-Audits/ (superseded).
 # Bins contain analyses of real businesses; the tool itself stays brand-agnostic.
 /Synth-mkt_*/
+/Active-Audits/
+/Legacy-Audits/
+
+# Session-local visual references (screenshots shared with Claude during a session)
+/vision-ref/
 
 # Workspace artifacts not part of the tool
 /ads-skills/

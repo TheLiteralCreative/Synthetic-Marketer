@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from backend import (
-    __version__, audit_meta, audit_runner, job_queue, progress,
+    __version__, active_audits, audit_meta, audit_runner, job_queue, progress,
     settings as settings_mod,
 )
 from backend.models import PingResponse, SettingsModel, SettingsResponse
@@ -79,7 +79,10 @@ async def create_audit(payload: CreateAuditRequest) -> dict:
     date = time.strftime("%Y%m%d")
     bin_name = f"Synth-mkt_{brand}_{date}"
     output_folder = Path(cfg.get("output_folder") or ROOT)
-    bin_dir = output_folder / bin_name
+    # Demote any existing Active folder for this brand to Legacy-Audits/.
+    # Brand match is case-insensitive; demoted folder gets an _<N> suffix.
+    active_audits.demote_active_to_legacy(output_folder, brand)
+    bin_dir = active_audits.active_dir(output_folder) / bin_name
 
     job = job_queue.create(payload.url, str(bin_dir), bin_name, options={
         "model": payload.model or audit_runner.DEFAULT_MODEL,
@@ -148,8 +151,9 @@ def list_audits() -> dict:
     bins = []
     cfg = settings_mod.load()
     output_folder = Path(cfg.get("output_folder") or ROOT)
-    if output_folder.exists():
-        for child in sorted(output_folder.glob("Synth-mkt_*"), reverse=True):
+    active_root = output_folder / active_audits.ACTIVE_DIRNAME
+    if active_root.exists():
+        for child in sorted(active_root.glob("Synth-mkt_*"), reverse=True):
             if not child.is_dir():
                 continue
             qa_path = child / "_QA-REPORT.md"
@@ -175,10 +179,14 @@ def list_audits() -> dict:
 
 @router.get("/bins")
 def list_bins() -> dict:
-    """Lightweight list of all Synth-mkt_* bins in the configured output folder."""
+    """Lightweight list of all Synth-mkt_* bins in Active-Audits/.
+
+    Legacy-Audits/ folders are intentionally excluded — they're archive-only.
+    """
     cfg = settings_mod.load()
     output_folder = Path(cfg.get("output_folder") or ROOT)
-    bins = audit_meta.list_bins(output_folder)
+    active_root = output_folder / active_audits.ACTIVE_DIRNAME
+    bins = audit_meta.list_bins(active_root)
     return {"output_folder": str(output_folder), "bins": bins}
 
 
@@ -275,12 +283,12 @@ def _derive_brand(url: str) -> str:
 
 
 def _resolve_bin(bin_name: str) -> Path:
-    """Resolve a bin name against the configured output folder. 404 if missing."""
+    """Resolve a bin name. Only Active-Audits/ is exposed via the API."""
     if not re.match(r"^Synth-mkt_[A-Za-z0-9_-]+$", bin_name):
         raise HTTPException(400, "invalid bin name")
     cfg = settings_mod.load()
     output_folder = Path(cfg.get("output_folder") or ROOT)
-    bin_dir = output_folder / bin_name
+    bin_dir = output_folder / active_audits.ACTIVE_DIRNAME / bin_name
     if not bin_dir.is_dir():
         raise HTTPException(404, "bin not found")
     return bin_dir
