@@ -1,26 +1,49 @@
 # FORWARD_PLAN — Synthetic-Marketer (a.k.a. SignalRipper)
 
-**Last updated:** 2026-05-13
-**Current version:** GUI v0.1.0 (B5) · `discover.py` v0.3.0 · `qa.py` v0.1.0 · Active/Legacy bin layout · QA-after-PDFs fix · Cloudflare Tunnel deployed at `signalripper.literalcreative.com` (auth gate pending) · tool rebranding to **SignalRipper** in progress
+**Last updated:** 2026-05-25
+**Current version:** GUI v0.1.0 (B5) · `discover.py` v0.3.0 · `qa.py` v0.1.0 · Active/Legacy bin layout · QA-after-PDFs fix · **Phase 1b complete — SignalRipper live and unattended on LC-NODE-01 via launchd persistence**, behind Cloudflare Access at `https://signalripper.literalcreative.com` · tool rebranding to **SignalRipper** in progress
 
-> **Naming note.** The repo is still named `Synthetic-Marketer`; the tool is being renamed to **SignalRipper** (signal extraction from a website's noise). Public URL is `signalripper.literalcreative.com`. In-app strings (GUI title, README header, `/api/ping` name field, etc.) still say "Synthetic-Marketer" — rebrand pass scheduled, see priority list below.
+> **Naming note.** The repo is still named `Synthetic-Marketer`; the tool is renamed to **SignalRipper** (signal extraction from a website's noise). Public URL is `signalripper.literalcreative.com`. In-app strings (GUI title, README header, `/api/ping` name field, etc.) still say "Synthetic-Marketer" — rebrand pass scheduled, see priority list below.
 
 ---
 
 ## Where we are
 
-Synthetic-Marketer is a **local-first marketing audit pipeline** that produces shareable, client-ready deliverables for any website in 10–15 minutes. The full pipeline runs end-to-end via either:
+Synthetic-Marketer / SignalRipper is a **marketing audit pipeline** that produces shareable, client-ready deliverables for any website in 10–15 minutes. It runs end-to-end via either:
 
-- **GUI**: `python3 start.py` → browser at `localhost:8000`
+- **GUI**: browser at `https://signalripper.literalcreative.com` (production) or `http://localhost:8000` (local dev)
 - **CLI**: `python3 -m backend.audit_runner <url> <bin>`
 
-The pipeline is in **production** for personal use. Three real audits have been validated (Capstone, Flexent, Hewitt + a smoke test on example.com). All five existing project bins pass QA cleanly.
+As of 2026-05-25, the tool runs **unattended on LC-NODE-01** (the Late-2015 27" iMac) via two `launchd` user agents — SignalRipper and the Cloudflare tunnel both start on boot, restart on crash, and need no Terminal windows. Access is gated by Cloudflare Access (Google OAuth + email allowlist) until the planned Kit-auth retrofit (priority #3 below) replaces gateway-level auth with app-level identity.
 
 **Repo:** https://github.com/TheLiteralCreative/Synthetic-Marketer (private)
 
 ---
 
-## Recent activity (last session — 2026-05-13)
+## Recent activity (last session — 2026-05-25)
+
+Phase 1b finished. Full completion-state handoff in `docs/PHASE-1B-STATE.md`; full session record in `docs/session-log/2026-05-25.md`.
+
+Notable shipped:
+
+- ✓ **launchd persistence on LC-NODE-01.** Two user LaunchAgents (`com.literalcreative.signalripper` + `com.literalcreative.cloudflared`) committed to `deploy/launchd/` and deployed to `~/Library/LaunchAgents/` on the iMac. `RunAtLoad` + `KeepAlive` + `ThrottleInterval` 10. SignalRipper runs `start.py --no-open` under the venv python; `cloudflared` runs with explicit `--config`. Process output redirected to `~/srv/logs/`. **Verified via cold reboot:** both services auto-started with fresh low PIDs (415, 418) and `https://signalripper.literalcreative.com` served the GUI with no manual intervention. This is the proof that the unattended-host goal is met, not just configured.
+- ✓ **Real audit run end-to-end through the public URL, SSE streaming verified live.** Operator initiated an audit through `https://signalripper.literalcreative.com` during the launchd-managed run; In-Progress view updated gradually phase by phase, not as an end-of-run dump. Non-skippable SSE check from `REMOTE-HOSTING.md` §3 step 7 — **passed**.
+- ✓ **Laptop tunnel decommissioned.** Confirmed no `cloudflared` process and no `launchd` service for it on the laptop. NODE_01 is the sole host answering the `signalripper` tunnel.
+- ✓ **Anthropic API key + per-machine output folder set on NODE_01.** Output folder `/Users/literalcreative/srv/apps/signalripper`. 16 existing audit bins (Active + Legacy) mirrored from the laptop to NODE_01; the GUI's bin list picks them up automatically (`backend/active_audits.py`'s `list_bins()` is a pure filesystem glob — no import step needed).
+- ✓ **`docs/PHASE-1B-STATE.md` rewritten** as a completion-state handoff with operating reference and updated breadcrumbs.
+- ✓ **`.claude/commands/session-open.md` + `session-close.md`** copied from ScriptRipper into this repo, closing a discipline gap (the `docs/session-log/` and `FORWARD_PLAN.md` infrastructure was already here; only the slash-command files were missing).
+
+Strategic decisions:
+
+- **Kit-auth chosen as the first concrete Ripper Kit module** (rather than copy-pasting ScriptRipper's auth into SignalRipper). Extract `auth.py` + `core/security.py` + `User` model into a reusable Kit module; both ScriptRipper and SignalRipper consume it; future Rippers inherit it. Solves the open user-approval / record-retention / remote-approval questions cleanly via an `is_approved` flag.
+- **Shared auth does not require shared hosting.** ScriptRipper stays on Render (paying customers + Stripe + SLA preclude operator-Mac dependency per `HOSTING-ROADMAP.md` §6); SignalRipper stays on NODE_01; both consume the same Kit-auth module. JWT-based identity makes one-login-every-Ripper trivially possible across hosts. v1 = per-Ripper User tables; v2 (3+ Rippers, several users) = shared identity DB.
+- **Cloudflare Access on `signalripper.literalcreative.com` is the temporary v1 gate.** Comes off when Kit-auth lands on SignalRipper.
+
+Known issue:
+
+- **Universal Clipboard, iMac → laptop, is unreliable.** Copy works laptop → iMac but not the reverse; `killall pboard`, Handoff re-toggle, and a full reboot did not fix it. Apple Notes (iCloud sync) used as a working bridge during this session. Open for fresh investigation — possibly Continuity-cache reset (iCloud sign-out / sign-in) or an OS-version mismatch (Monterey iMac vs. current-macOS laptop).
+
+## Recent activity (prior session — 2026-05-13)
 
 Big session. Three feature/fix shipments + the entire DNS-and-tunnel deployment that the prior session had filed as backlog #9 PRIORITY. See `docs/session-log/2026-05-13.md` for full detail.
 
@@ -56,35 +79,42 @@ Notable shipped:
 
 ## Active priorities — next session pickup
 
-In rough priority order. The tool works as-is locally and via the tunnel (when started); none of these are blocking that.
+In rough priority order. The deploy workflow (#1) is the immediate unblocker for any forward code change, including the operator's planned delivery-report feature work on SignalRipper.
 
-1. **[TOGETHER] PRIORITY — Cloudflare Access auth gate.** Stand up Google OAuth + email allowlist in front of `signalripper.literalcreative.com` before the tunnel goes back up. Operator handles the Cloudflare Zero Trust dashboard (Access → Applications → Add an application → Self-hosted → application domain `signalripper.literalcreative.com` → add Google as identity provider → policy "Allow" with email rule listing operator + invited collaborators). Claude assists with policy structure and verifies the auth flow works end-to-end. Until this ships, do NOT run `cloudflared tunnel run signalripper` in a way that leaves the URL up — the tool is currently unauthenticated.
+1. **[CLAUDE]** **Deploy workflow** — laptop → GitHub → NODE_01. Runbook + a one-command deploy script on NODE_01 (`~/srv/bin/deploy-signalripper.sh`) that pulls from GitHub, restarts the SignalRipper `launchd` service (`launchctl unload`/`load -w`), and prints clear pass/fail. Document the upgrade path to automated pull (cron poll or GitHub webhook) for later. Designed as universal practice — same shape works for ScriptRipper, ON-SET Compiler, every future Ripper.
 
-2. **[CLAUDE]** Run a real audit through `https://signalripper.literalcreative.com` once auth is in place, and confirm SSE phase events stream live (not buffered). The named-tunnel SSE path is documented as working in practice but the smoke test is non-skippable per `docs/REMOTE-HOSTING.md` §3 step 7. If buffering shows up, the three escalating fixes are listed in that section.
+2. **[CLAUDE]** **Scalable health-check + monitoring v1 for NODE_01.** Scheduled check that confirms SignalRipper stays reachable, with a single combined report channel ready to grow as Rippers multiply. **One decision needed first:** how the monitor gets past the Cloudflare Access gate — either a Cloudflare Access service token, or checking the tunnel's health via Cloudflare's API. The wrinkle dissolves once Kit-auth (#3–#4) replaces Cloudflare Access on SignalRipper.
 
-3. **[CLAUDE]** Write `~/Library/LaunchAgents/com.signalripper.cloudflared.plist` so the tunnel auto-starts on login and survives sleep/wake. Document the `launchctl load`/`unload` commands. Reference `cloudflared service install` as an alternative path (it generates the plist automatically) — pick the cleaner approach during implementation.
+3. **[CLAUDE]** **Extract Kit-auth module from ScriptRipper.** Pull `app/api/auth.py` + `app/core/security.py` + `User` model out as the first reusable Ripper Kit module. SQLAlchemy-based so Postgres (ScriptRipper) and SQLite (NODE_01) work interchangeably. Add the `is_approved` flag pattern for gated registration. This is the centerpiece of the Ripper Kit effort.
 
-4. **[CLAUDE]** Build the `/publish-tool` skill from this session's deployment experience. Inputs: subdomain + local port. Pre-checks: parent domain on Cloudflare, `cloudflared` installed + logged in. Auto-runs: `tunnel create`, `tunnel route dns`, append ingress rule to `~/.cloudflared/config.yml`, generate launchd plist, smoke-test the URL. Manual gate: Cloudflare Access app creation (or automate via Cloudflare API if an API token is configured). Goal: next tool deployment (e.g. ScriptRipper migration to this pattern, or ON-SET Compiler when ready) becomes a one-liner.
+4. **[CLAUDE]** **Retrofit SignalRipper with Kit-auth.** Wire Kit-auth into SignalRipper: SQLite User table on NODE_01, login screen + OAuth callback in the frontend, JWT-protected API endpoints, admin tap-to-approve flow. Register a new Google OAuth client for `signalripper.literalcreative.com` (separate from ScriptRipper's). Remove the Cloudflare Access app from the subdomain once app-auth is live and verified.
 
-5. **[CLAUDE]** Rebrand pass: `Synthetic-Marketer` → `SignalRipper` in user-visible strings. Audit list of files: `frontend/src/` (page titles, header text, browser tab title), `backend/__init__.py` (`__version__` is fine but check for name string), `backend/routes.py` `/api/ping` returns `name="Synthetic-Marketer"` — change to `SignalRipper`. README.md header. Don't rename the repo or Python package (keeps git history sane); only customer-facing strings.
+5. **[YOU/TOGETHER]** **Update `literalcreative.com`** to showcase active Rippers, with the Kit-auth login as the entry point for each tool. Scope depends on the current site structure; partially gated on #4 landing.
 
-6. **[YOU]** Email deliverability cleanup on `literalcreative.com` (carried over from the DNS migration recon — known but not fixed tonight):
+6. **[CLAUDE]** Rebrand pass: `Synthetic-Marketer` → `SignalRipper` in user-visible strings. Audit list: `frontend/src/` (page titles, header text, browser tab title), `backend/__init__.py` (name string), `backend/routes.py` `/api/ping` returns `name="Synthetic-Marketer"` — change to `SignalRipper`. README.md header. Don't rename the repo or Python package (keeps git history sane); customer-facing strings only.
+
+7. **[YOU]** Email deliverability cleanup on `literalcreative.com` (carried over):
    - Edit SPF TXT record in Cloudflare DNS from `v=spf1 include:_spf.wpcloud.com ~all` to `v=spf1 include:_spf.google.com ~all`. Outbound mail from `@literalcreative.com` via Gmail is currently failing SPF.
-   - Set up DKIM signing in Google Workspace admin (Apps → Google Workspace → Gmail → Authenticate email). Generate the key, paste the resulting `google._domainkey` TXT record into Cloudflare DNS. ~10 min.
+   - Set up DKIM signing in Google Workspace admin (Apps → Google Workspace → Gmail → Authenticate email). ~10 min.
 
-7. **[TOGETHER]** Apply the same DNS migration + tunnel pattern to ScriptRipper (per operator's plan to consolidate). Migrate `scriptripper.com` from current registrar/DNS to Cloudflare DNS. Then either (a) deploy ScriptRipper as a Cloudflare-tunneled subdomain like SignalRipper, OR (b) keep current Render deployment and just consolidate DNS — depends on whether ScriptRipper has the same constraints (long jobs, headless Chrome, etc.) that disqualified Render for SignalRipper. Worth the `/publish-tool` skill being built first so this becomes a one-liner.
+8. **[TOGETHER]** ScriptRipper consolidation — *reframed 2026-05-25.* Original plan was to migrate ScriptRipper to a Cloudflare-tunneled subdomain on NODE_01 (priority #7 in the prior list). Architectural call as of this session: keep ScriptRipper on Render (paying customers + Stripe + SLA preclude operator-Mac dependency per `HOSTING-ROADMAP.md` §6) and instead consolidate the *user experience* via shared Kit-auth (priorities #3–#4 above). The domain-consolidation question for `scriptripper.com` / `signalripper.com` / future Ripper domains remains open — single hub page with subdomain links, 301 redirects to LC subpages, etc. — discuss when traffic justifies it.
 
-8. **[TOGETHER]** Decide consolidation pattern: the operator wants `scriptripper.com` and `signalripper.com` (and presumably future tool domains) to "point to the literalcreative page" eventually. Several patterns to choose from — single hub site with links to subdomains, 301 redirects from old apex domains to LC subpages, full DNS merger. Discuss and pick a pattern when traffic justifies the move off the operator's local Mac (per `docs/REMOTE-HOSTING.md` §6 trigger conditions).
+9. **[YOU]** Run more real audits in production and observe quality. The fixed pipeline now runs Active/Legacy correctly, surfaces testimonials/blockquotes, and produces clean QA reports. New accuracy gaps become the next round of fixes.
 
-9. **[YOU]** Run one or more real audits and observe quality in production (carried over). The fixed pipeline now surfaces testimonials/blockquotes, runs Active/Legacy correctly, and produces clean QA reports. If new accuracy gaps surface, those become the next round of fixes.
+10. **[YOU]** Get a free Google PageSpeed Insights API key, set in Settings (carried over). 5 min at `console.cloud.google.com`.
 
-10. **[YOU]** Get a free Google PageSpeed Insights API key, set in Settings (carried over). 5 minutes at console.cloud.google.com.
+11. **[YOU]** Read through `docs/METHODOLOGY.md` and direct edits before external use. Particularly Q22 pricing language, section 3 tone, closing workflow paragraph.
 
-11. **[YOU]** Read through `docs/METHODOLOGY.md` and direct edits before external use (carried over). Particularly Q22 pricing language, section 3 tone, closing workflow paragraph.
+12. **[TOGETHER]** Backlog triage — see `tools/BACKLOG.md`. Item #9 (remote hosting) is now fully done. Highest-impact remaining:
+   - Brand voice profile deliverable (BACKLOG #3)
+   - Re-audit / delta tracking (BACKLOG #4)
 
-12. **[TOGETHER]** Backlog triage — see `tools/BACKLOG.md` for deferred ideas. Item #9 (remote hosting) is now substantially done; remaining highest-impact:
-   - **Brand voice profile deliverable** (BACKLOG #3) — generates a `BRAND-VOICE.md` per audit
-   - **Re-audit / delta tracking** (BACKLOG #4) — `tools/delta.py` compares two bins of the same brand
+13. **[YOU]** Carried-over breadcrumbs from `PHASE-1B-STATE.md`:
+   - Tonight's `/session-close` handles committing the new `deploy/launchd/` plists, `docs/LC-NODE-01_Infrastructure-Strategy.md`, `docs/PHASE-1B-STATE.md`, and `.claude/commands/` files.
+   - Rotate the two exposed credentials flagged earlier in the program (Stripe test key + GitHub PAT).
+   - Update `MEDIA_RIPPERS_PROGRAM_PLAN.md` per `HOSTING-ROADMAP.md` §1.
+   - Mark `DEDICATED-HOST-SETUP.md` steps 6–8 complete in that doc.
+   - Hand `PHASE-1-BRIEF.md` to Claude Code pointed at the `Synthetic-Marketer` folder.
 
 ---
 
@@ -97,19 +127,28 @@ See [`tools/BACKLOG.md`](../tools/BACKLOG.md) for the deferred-features list (8 
 ## Locked decisions (architectural)
 
 - **No Claude Agent SDK dep** — pivoted to direct `anthropic` SDK. Reason: agent SDK isn't on PyPI under the name we expected; direct API gives more control + sidesteps the Claude Code permissions layer entirely.
-- **Local-first GUI** — FastAPI + React served as a single deployment unit on `localhost:8000`. No cloud deployment. API key stays on the operator's machine.
+- **Local-first GUI** — FastAPI + React served as a single deployment unit. Now hosted unattended on LC-NODE-01.
 - **In-memory job queue** — by design for a single-user tool. Job state dies with the server. Bins on disk are the persistent record.
 - **No cost-ceiling abort mid-audit** — explicitly rejected. Manual cancel button + correct cost meter + post-Phase-1 estimate is the right shape; mid-audit abort would waste partial work and force re-runs.
 - **Hard rule: self-contained audits** — no cross-audit references in any deliverable. `tools/qa.py` enforces this with regex pattern matching. Sibling-bin brand-name leakage check uses generic-token stop-list to avoid false positives on smoke-test bins.
+- **Two hand-written user LaunchAgents over `cloudflared service install`** *(2026-05-25)* — one mental model, one set of `launchctl` commands, consistent management across both services. The official `service install` would have created a system-level daemon for the tunnel while SignalRipper needs its own user agent — different locations, different commands, two ways to think about it. The marginal automation isn't worth the inconsistency.
+- **Kit-auth as the first concrete Ripper Kit module** *(2026-05-25)* — extract from ScriptRipper rather than copy-paste into SignalRipper. The first time a pattern needs a second consumer is the right moment to extract it. Gives the Ripper Kit a high-value module to start with rather than a generic skeleton.
+- **SQLite for SignalRipper's user table** *(2026-05-25)* — matches NODE_01's local-disk model; no external DB dependency. SQLAlchemy keeps the schema interchangeable with ScriptRipper's Postgres.
+- **Cloudflare Access on `signalripper.literalcreative.com` is temporary** *(2026-05-25)* — it exists because we needed a gate fast and didn't want to write auth code. Comes off when Kit-auth lands on SignalRipper.
 
 ---
 
 ## Operating notes
 
+- **SignalRipper on NODE_01 runs via two user LaunchAgents** — `com.literalcreative.signalripper` and `com.literalcreative.cloudflared` in `~/Library/LaunchAgents/`. Version-controlled at `deploy/launchd/`.
+- **Check status:** `launchctl list | grep literalcreative` on the iMac. Real PID + `0` exit = healthy.
+- **Watch live activity:** `tail -f ~/srv/logs/signalripper.out.log` — the launchd-era replacement for watching a Terminal window. Process output is redirected to log files because launchd-managed processes have no controlling Terminal.
+- **Restart a service:** `kill` alone will NOT stop it — `KeepAlive` respawns immediately. Use `launchctl unload <plist>` then `launchctl load -w <plist>`.
+- **Deploy updated code (manual, today):** `git pull` on NODE_01, then `unload` + `load` the SignalRipper agent. (Will be a single command once priority #1 lands.)
 - **Cost per audit:** $0.25–$1.50 with Haiku for typical small/medium sites; $1–$4 Sonnet; $3–$15 Opus. Pre-flight estimate after Phase 1 sets expectations per-site.
-- **API key location:** `data/settings.json` (gitignored). Set via Settings tab in GUI or shell env var `ANTHROPIC_API_KEY`.
-- **Project bins are gitignored.** Per-audit deliverables stay local. The repo ships only the tool.
-- **Output folder configurable** via Settings — default is project root.
+- **API key location on NODE_01:** `~/srv/apps/signalripper/data/settings.json` (gitignored). Set via Settings tab in GUI or shell env var `ANTHROPIC_API_KEY`.
+- **Project bins are gitignored.** Per-audit deliverables stay local on whichever machine ran them.
+- **Output folder configurable** via Settings — NODE_01's is `/Users/literalcreative/srv/apps/signalripper`.
 
 ---
 
