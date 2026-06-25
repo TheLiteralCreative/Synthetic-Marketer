@@ -9,6 +9,18 @@ require, so that decision is costed and ready rather than re-derived under press
 **Status:** Tier 1 in progress (auth gate). Tier 2 is the planned durable home. Tier 3 is
 documented-but-not-scheduled.
 
+> **SUPERSEDE NOTE — 2026-06-24 (re: ScriptRipper only).** §1 of this doc routed
+> ScriptRipper to Render on the "unattended → Render web service" runtime-shape rule.
+> On review (Joel + Claude, 2026-06-24) that rule was found to prove Render *permissible*,
+> not *preferable*: the doc's own anti-home-server argument ("a machine being awake every
+> morning at cron time") describes the **laptop**, not NODE-01 — whose entire purpose is to
+> be always-on. The roadmap's own cost-trigger principle (don't go cloud until a paid /
+> multi-user / uptime-obligation trigger fires) says stay on owned hardware until then.
+> **Decision: ScriptRipper is hosted on NODE-01, not Render** — same tunnel + launchd
+> pattern as SignalRipper. Render remains a documented later flip if a trigger fires. This
+> note supersedes the "ScriptRipper → Render" guidance in §1 for ScriptRipper; SignalRipper's
+> tiers are unchanged.
+
 ---
 
 ## 1. Re-assessment — where this leaves the plan
